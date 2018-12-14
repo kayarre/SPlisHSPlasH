@@ -23,6 +23,7 @@ Emitter::Emitter(FluidModel *model, const unsigned int width, const unsigned int
 	m_type = type;
 
 	m_nextEmitTime = 0.0;
+        m_prevEmitTime = 0.0;
 	m_emitCounter = 0;	
 }
 
@@ -251,10 +252,143 @@ void Emitter::emitParticlesCircle(std::vector <unsigned int> &reusedParticles, u
 	m_emitCounter++;
 }
 
+void Emitter::emitParticlesCirclePoiseuille(std::vector <unsigned int> &reusedParticles, unsigned int &indexReuse, unsigned int &numEmittedParticles)
+{
+	if (TimeManager::getCurrent()->getTime() < m_nextEmitTime)
+		return;
+
+	Vector3r axis1, axis2;
+	Vector3r d = m_dir;
+	getOrthogonalVectors(d, axis1, axis2);
+
+	Simulation *sim = Simulation::getCurrent();
+	const Real r = sim->getValue<Real>(Simulation::PARTICLE_RADIUS);
+	const Real diam = 2.0*r;
+
+	const Real radius = (0.5 * (Real)m_width * diam);
+	const Real radius2 = radius*radius;
+
+	const Real startX = -0.5*(m_width - 1)*diam;
+	const Real startZ = -0.5*(m_width - 1)*diam;
+    
+    Vector3r loc_circle;
+    Vector3r v_dir;
+    Real time_var;
+    
+    Real dt = (TimeManager::getCurrent()->getTime() - m_prevEmitTime);
+    if (m_emitCounter == 0)
+        time_var = 0.0; //std::numeric_limits<Real>::max();
+    else
+        time_var = dt*(Real) ((m_emitCounter % (int) m_emitsPerSecond));
+    Real p_dt;
+    
+    //std::cout <<m_emitCounter << " " <<  time_var << std::endl;
+
+	if ((m_model->numActiveParticles() < m_model->numParticles()) ||
+		(reusedParticles.size() > 0))
+	{
+		unsigned int indexNotReuse = m_model->numActiveParticles();
+		for (unsigned int i = 0; i < m_width; i++)
+		{
+			for (unsigned int j = 0; j < m_width; j++)
+			{
+				const Real x = (i*diam + startX);
+				const Real y = (j*diam + startZ);
+
+				unsigned int index = 0;
+				bool reused = false;
+				if (indexReuse < reusedParticles.size())
+				{
+					index = reusedParticles[indexReuse];
+					reused = true;
+				}
+				else
+				{
+					index = indexNotReuse;
+				}
+                
+                loc_circle = x*axis1 + y*axis2;
+                v_dir = m_v*(1.0-loc_circle.squaredNorm()/radius2);
+                p_dt =  2.0*diam/v_dir.norm(); //minimum travel time
+                //std::cout << time_var << " " <<  p_dt<< std::endl;
+				if ((index < m_model->numParticles()) &&
+                     (x*x + y*y <= radius2) && 
+                     (time_var > p_dt )
+                    )
+				{
+                    
+					m_model->getPosition(index) = loc_circle + m_x;
+                    // specify poisuille flow
+					m_model->getVelocity(index) = v_dir;
+
+					if (reused)
+					{
+						indexReuse++;
+					}
+					else
+					{
+						numEmittedParticles++;
+						indexNotReuse++;
+					}
+					index++;
+				}
+			}
+		}
+
+		if (numEmittedParticles != 0)
+		{
+			m_model->setNumActiveParticles(m_model->numActiveParticles() + numEmittedParticles);
+			Simulation *sim = Simulation::getCurrent();
+			sim->emittedParticles(m_model, m_model->numActiveParticles() - numEmittedParticles);
+			sim->getNeighborhoodSearch()->resize_point_set(m_model->getPointSetIndex(), &m_model->getPosition(0)[0], m_model->numActiveParticles());
+		}
+	}
+	else
+	{
+		if (m_model->numActiveParticles() < m_model->numParticles())
+		{
+			unsigned int index = m_model->numActiveParticles();
+			for (unsigned int i = 0; i < m_width; i++)
+			{
+				for (unsigned int j = 0; j < m_width; j++)
+				{
+					const Real x = (i*diam + startX);
+					const Real y = (j*diam + startZ);
+                    
+                    loc_circle = x*axis1 + y*axis2;
+                    v_dir = m_v*(1.0-loc_circle.squaredNorm()/radius2);
+                    p_dt =  2.0*diam/v_dir.norm(); //minimum travel time
+                    if ((index < m_model->numParticles()) &&
+                        (x*x + y*y <= radius2) && 
+                        (time_var > p_dt )
+                        )
+					{
+                        loc_circle = x*axis1 + y*axis2;
+						m_model->getPosition(index) = loc_circle + m_x;
+						m_model->getVelocity(index) = v_dir;
+						numEmittedParticles++;
+						index++;
+					}
+				}
+			}
+			m_model->setNumActiveParticles(m_model->numActiveParticles() + numEmittedParticles);
+			Simulation *sim = Simulation::getCurrent();
+			sim->emittedParticles(m_model, m_model->numActiveParticles() - numEmittedParticles);
+			sim->getNeighborhoodSearch()->resize_point_set(m_model->getPointSetIndex(), &m_model->getPosition(0)[0], m_model->numActiveParticles());
+		}
+	}
+
+	m_nextEmitTime += 1.0 / m_emitsPerSecond;
+	m_emitCounter++;
+    m_prevEmitTime = TimeManager::getCurrent()->getTime();
+}
+
 void Emitter::step(std::vector <unsigned int> &reusedParticles, unsigned int &indexReuse, unsigned int &numEmittedParticles)
 {
 	if (m_type == 1)
 		emitParticlesCircle(reusedParticles, indexReuse, numEmittedParticles);
+    else if (m_type == 3)
+		emitParticlesCirclePoiseuille(reusedParticles, indexReuse, numEmittedParticles);
 	else
 		emitParticles(reusedParticles, indexReuse, numEmittedParticles);
 }

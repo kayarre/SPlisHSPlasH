@@ -26,11 +26,13 @@ namespace SPH
 			Real m_emitsPerSecond;
 			unsigned int m_type;
 			Real m_nextEmitTime;
+            Real m_prevEmitTime;
 			unsigned int m_emitCounter;
 
 		public:
 			void emitParticles(std::vector <unsigned int> &reusedParticles, unsigned int &indexReuse, unsigned int &numEmittedParticles);
 			void emitParticlesCircle(std::vector <unsigned int> &reusedParticles, unsigned int &indexReuse, unsigned int &numEmittedParticles);
+            void emitParticlesCirclePoiseuille(std::vector <unsigned int> &reusedParticles, unsigned int &indexReuse, unsigned int &numEmittedParticles);
 			Real getNextEmitTime() const { return m_nextEmitTime; }
 			void setNextEmitTime(Real val) { m_nextEmitTime = val; }
 			static void getOrthogonalVectors(const Vector3r &vec, Vector3r &x, Vector3r &y);

@@ -241,7 +241,7 @@ void Simulation::setKernel(int val)
 void Simulation::updateTimeStepSize()
 {
 	if (m_cflMethod == 1)
-		updateTimeStepSizeCFL(0.0001);
+		updateTimeStepSizeCFL(0.0000001);
 	else if (m_cflMethod == 2)
 	{
 		Real h = TimeManager::getCurrent()->getTimeStepSize();
